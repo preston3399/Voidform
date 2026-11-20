@@ -21,6 +21,7 @@ juce_add_binary_data(VoidformData SOURCES
     Shaders/fullscreen.vert Shaders/fade.frag Shaders/blur_down.frag Shaders/blur_up.frag
     Shaders/particles.vert  Shaders/particles.frag Shaders/composite.frag
     Presets/presets.json
+    Presets/feels.json
     Assets/frame169.png Assets/frame916.png Assets/frame11.png)
 
 juce_add_plugin(Voidform
