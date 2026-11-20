@@ -68,6 +68,7 @@ ControlPanel::ControlPanel(juce::AudioProcessorValueTreeState& s) : apvts(s)
     slider("vignette", "Vignette");
 
     section("PARTICLES");
+    choice("shape", "Shape");             choice("pstyle", "Particle style");
     slider("count", "Particle count");    slider("size", "Particle size", " px");
     slider("fuzz", "Fuzz / thickness");   slider("mesh", "Wire mesh");
     slider("filaments", "Filaments");     slider("filLen", "Filament length");
@@ -82,6 +83,7 @@ ControlPanel::ControlPanel(juce::AudioProcessorValueTreeState& s) : apvts(s)
     slider("sens", "Sensitivity");
     slider("react", "Reactivity");
     slider("punch", "Punch (explosion)");
+    slider("spinKick", "Spin kick (on hits)");
     slider("shake", "Camera shake");
     slider("attack", "Attack", " ms");    slider("release", "Release", " ms");
     for (int i = 1; i <= 4; ++i)
@@ -176,6 +178,8 @@ VoidformEditor::VoidformEditor(VoidformProcessor& p)
     setLookAndFeel(&laf);
 
     presets = juce::JSON::parse(juce::String::fromUTF8(BinaryData::presets_json, BinaryData::presets_jsonSize));
+    feels   = juce::JSON::parse(juce::String::fromUTF8(BinaryData::feels_json, BinaryData::feels_jsonSize));
+    loadUserLooks();
 
     addAndMakeVisible(visual);
     visual.onDoubleClick = [this] { setUiHidden(!uiHidden); };
@@ -183,10 +187,25 @@ VoidformEditor::VoidformEditor(VoidformProcessor& p)
     presetLabel.setText("Look", juce::dontSendNotification);
     addAndMakeVisible(presetLabel);
     presetBox.setTextWhenNothingSelected("Load a look...");
-    if (auto* arr = presets.getArray())
-        for (int i = 0; i < arr->size(); ++i) presetBox.addItem(arr->getReference(i)["name"].toString(), i + 1);
-    presetBox.onChange = [this] { applyPreset(presetBox.getSelectedId() - 1); };
+    rebuildLookBox();
+    presetBox.onChange = [this]
+    {
+        const int id = presetBox.getSelectedId();
+        if (id >= 1000) { if (id - 1000 < userLooks.size()) applyValues(userLooks.getReference(id - 1000)["values"]); }
+        else applyPreset(id - 1);
+    };
     addAndMakeVisible(presetBox);
+
+    feelLabel.setText("Feel", juce::dontSendNotification);
+    addAndMakeVisible(feelLabel);
+    feelBox.setTextWhenNothingSelected("Pick a track style (spin / punch)...");
+    if (auto* arr = feels.getArray())
+        for (int i = 0; i < arr->size(); ++i) feelBox.addItem(arr->getReference(i)["name"].toString(), i + 1);
+    feelBox.onChange = [this] { applyFeel(feelBox.getSelectedId() - 1); };
+    addAndMakeVisible(feelBox);
+    saveButton.setTooltip("Save the current sliders as your own look");
+    saveButton.onClick = [this] { saveLookDialog(); };
+    addAndMakeVisible(saveButton);
 
     hideButton.setTooltip("Hide the controls (double-click the visual to bring them back)");
     hideButton.onClick = [this] { setUiHidden(true); };
@@ -238,7 +257,7 @@ void VoidformEditor::setUiHidden(bool hide)
 {
     uiHidden = hide;
     for (juce::Component* c : { (juce::Component*) &frameToggle, (juce::Component*) &aspectBox, (juce::Component*) &aspectLabel,
-                                (juce::Component*) &crtSlider, (juce::Component*) &crtLabel, (juce::Component*) &presetBox, (juce::Component*) &presetLabel, (juce::Component*) &hideButton,
+                                (juce::Component*) &crtSlider, (juce::Component*) &crtLabel, (juce::Component*) &presetBox, (juce::Component*) &presetLabel, (juce::Component*) &feelBox, (juce::Component*) &feelLabel, (juce::Component*) &saveButton, (juce::Component*) &hideButton,
                                 (juce::Component*) &spectrum, (juce::Component*) &viewport })
         c->setVisible(!hide);
     resized();
@@ -286,6 +305,14 @@ void VoidformEditor::resized()
     side.removeFromTop(6);
     {
         auto row = side.removeFromTop(26);
+        saveButton.setBounds(row.removeFromRight(78));
+        row.removeFromRight(6);
+        feelLabel.setBounds(row.removeFromLeft(34));
+        feelBox.setBounds(row);
+        side.removeFromTop(6);
+    }
+    {
+        auto row = side.removeFromTop(26);
         frameToggle.setBounds(row.removeFromLeft(80));
         aspectLabel.setBounds(row.removeFromLeft(50));
         aspectBox.setBounds(row.removeFromLeft(100));
@@ -304,11 +331,9 @@ void VoidformEditor::resized()
     repaint();
 }
 
-void VoidformEditor::applyPreset(int index)
+void VoidformEditor::applyValues(const juce::var& values)
 {
-    auto* arr = presets.getArray();
-    if (arr == nullptr || index < 0 || index >= arr->size()) return;
-    if (auto* obj = (*arr)[index]["values"].getDynamicObject())
+    if (auto* obj = values.getDynamicObject())
         for (auto& nv : obj->getProperties())
             if (auto* prm = dynamic_cast<juce::RangedAudioParameter*>(proc.apvts.getParameter(nv.name.toString())))
             {
@@ -316,4 +341,88 @@ void VoidformEditor::applyPreset(int index)
                 prm->setValueNotifyingHost(prm->convertTo0to1((float) nv.value));
                 prm->endChangeGesture();
             }
+}
+
+void VoidformEditor::applyPreset(int index)
+{
+    auto* arr = presets.getArray();
+    if (arr == nullptr || index < 0 || index >= arr->size()) return;
+    applyValues((*arr)[index]["values"]);
+}
+
+// "Feel" presets only touch spin / punch / reactivity / band routing, so they layer on top of any look.
+void VoidformEditor::applyFeel(int index)
+{
+    auto* arr = feels.getArray();
+    if (arr == nullptr || index < 0 || index >= arr->size()) return;
+    applyValues((*arr)[index]["values"]);
+}
+
+juce::File VoidformEditor::userLooksFile()
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+               .getChildFile("Preston").getChildFile("Voidform").getChildFile("user_looks.json");
+}
+
+void VoidformEditor::loadUserLooks()
+{
+    userLooks.clear();
+    const auto f = userLooksFile();
+    if (!f.existsAsFile()) return;
+    auto v = juce::JSON::parse(f.loadFileAsString());
+    if (auto* arr = v.getArray())
+        for (auto& item : *arr) userLooks.add(item);
+}
+
+void VoidformEditor::rebuildLookBox(int selectId)
+{
+    presetBox.clear(juce::dontSendNotification);
+    if (auto* arr = presets.getArray())
+        for (int i = 0; i < arr->size(); ++i) presetBox.addItem(arr->getReference(i)["name"].toString(), i + 1);
+    if (!userLooks.isEmpty())
+    {
+        presetBox.addSeparator();
+        presetBox.addSectionHeading("My looks");
+        for (int i = 0; i < userLooks.size(); ++i) presetBox.addItem(userLooks.getReference(i)["name"].toString(), 1000 + i);
+    }
+    if (selectId > 0) presetBox.setSelectedId(selectId, juce::dontSendNotification);
+}
+
+void VoidformEditor::saveLookDialog()
+{
+    auto* aw = new juce::AlertWindow("Save look", "Name for this look:", juce::MessageBoxIconType::NoIcon);
+    aw->addTextEditor("name", "My look");
+    aw->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    aw->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    juce::Component::SafePointer<VoidformEditor> safe(this);
+    aw->enterModalState(true, juce::ModalCallbackFunction::create([safe, aw](int result)
+    {
+        if (result != 1 || safe == nullptr) return;
+        auto name = aw->getTextEditorContents("name").trim();
+        if (name.isEmpty()) return;
+
+        auto* vals = new juce::DynamicObject();
+        for (auto* prm : safe->proc.getParameters())
+            if (auto* rp = dynamic_cast<juce::RangedAudioParameter*>(prm))
+            {
+                const auto id = rp->paramID;
+                if (id == "frame" || id == "aspect" || id == "crt") continue;
+                vals->setProperty(id, rp->convertFrom0to1(rp->getValue()));
+            }
+        auto* entry = new juce::DynamicObject();
+        entry->setProperty("name", name);
+        entry->setProperty("values", juce::var(vals));
+
+        int replace = -1;
+        for (int i = 0; i < safe->userLooks.size(); ++i)
+            if (safe->userLooks.getReference(i)["name"].toString() == name) replace = i;
+        if (replace >= 0) safe->userLooks.set(replace, juce::var(entry));
+        else              safe->userLooks.add(juce::var(entry));
+
+        juce::Array<juce::var> copy(safe->userLooks);
+        auto f = userLooksFile();
+        f.getParentDirectory().createDirectory();
+        f.replaceWithText(juce::JSON::toString(juce::var(copy)));
+        safe->rebuildLookBox(1000 + (replace >= 0 ? replace : safe->userLooks.size() - 1));
+    }), true);
 }

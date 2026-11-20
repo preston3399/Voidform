@@ -210,7 +210,7 @@ void Renderer::renderOpenGL()
     Eff e;
     e.zoom      = P("zoom") * (1.0f + 0.50f * mods[vf::tSize] + 0.12f * punch);
     e.warp      = P("warp") + 1.1f * mods[vf::tWarp] + 0.25f * punch;
-    e.spinAdd   = mods[vf::tSpin] * 4.0f + 1.5f * punch;
+    e.spinAdd   = mods[vf::tSpin] * 4.0f + 1.5f * punch * P("spinKick");
     e.filaments = std::min(1.0f, P("filaments") + 0.5f * mods[vf::tFilaments] + 0.1f * punch);
     e.filLen    = P("filLen") * (1.0f + 1.2f * mods[vf::tFilaments]);
     e.bloom     = P("bloom") * (1.0f + 1.5f * mods[vf::tBloom] + 0.5f * punch) + 0.9f * mods[vf::tBloom];
@@ -221,7 +221,7 @@ void Renderer::renderOpenGL()
 
     // ---- auto-fit: estimate how far the cloud reaches this frame and shrink it to stay inside the window ----
     {
-        const float ext = 1.0f + std::max(0.0f, e.warp) * 0.75f + punch * 1.5f + P("fuzz") * 0.6f
+        const float ext = vf::shapeExtent((int) std::lround(P("shape"))) + std::max(0.0f, e.warp) * 0.75f + punch * 1.5f + P("fuzz") * 0.6f
                           + (e.filaments > 0.01f ? e.filLen * (0.8f + 0.8f * punch) * std::min(1.0f, e.filaments * 3.0f) : 0.0f);
         float target = juce::jlimit(0.25f, 1.0f, 1.55f / ext) * std::min(1.0f, (float) W / (float) H);
         target = juce::jmap(P("fit"), 1.0f, target);
@@ -299,6 +299,8 @@ void Renderer::renderOpenGL()
     U1(pp, "uColorMix", P("colorMix"));
     U1(pp, "uColorShift", e.cshift);
     U1(pp, "uInk", ink ? 1.0f : 0.0f);
+    U1i(pp, "uShape", (int) std::lround(P("shape")));
+    U1i(pp, "uStyle", (int) std::lround(P("pstyle")));
     U3(pp, "uColA", ar, ag, ab);
     U3(pp, "uColB", br, bg, bb);
 

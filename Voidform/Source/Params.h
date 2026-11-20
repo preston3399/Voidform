@@ -10,6 +10,20 @@ inline juce::StringArray targetNames()
     return { "Size (kick)", "Warp / blobbiness", "Spin speed", "Filaments", "Bloom", "Glitch", "Brightness", "Color shift" };
 }
 
+inline juce::StringArray shapeNames()
+{
+    return { "Sphere", "Torus", "Spiral galaxy", "Tunnel", "Wave terrain", "Explosion", "Crystal urchin",
+             "Faceted shards", "Lattice cube", "DNA helix", "Star burst" };
+}
+inline juce::StringArray styleNames() { return { "Dots", "Streaks", "Shards", "Embers", "Pixels" }; }
+
+// rough radius of each shape, used by auto-fit
+inline float shapeExtent(int s)
+{
+    static const float e[] = { 1.0f, 1.0f, 1.25f, 2.0f, 1.4f, 1.5f, 1.6f, 1.3f, 1.2f, 1.2f, 1.1f };
+    return e[juce::jlimit(0, 10, s)];
+}
+
 inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
 {
     using juce::NormalisableRange;
@@ -42,6 +56,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     F("glitch", "Glitch", 0, 1, 0.05f);          F("vignette", "Vignette", 0, 1, 0.35f);
 
     // ---- particles ----
+    layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "shape", 1 }, "Shape", shapeNames(), 0));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{ "pstyle", 1 }, "Particle style", styleNames(), 0));
     F("count", "Particle count", 10000, 1500000, 400000, 0.45f, 1000);
     F("size", "Particle size", 0.5f, 8, 1.5f, 0.6f);
     F("fuzz", "Fuzz / thickness", 0, 1, 0.08f);  F("filaments", "Filaments", 0, 1, 0.5f);
@@ -58,6 +74,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
     F("sens", "Sensitivity", 0, 4, 1.0f);
     F("react", "Reactivity", 0, 4, 1.6f);
     F("punch", "Punch (beat explosion)", 0, 3, 1.5f);
+    F("spinKick", "Spin kick (spin burst on hits)", 0, 4, 1.0f);
     F("shake", "Camera shake", 0, 1, 0.5f);
     F("attack", "Attack (ms)", 1, 200, 8, 0.5f); F("release", "Release (ms)", 20, 1500, 250, 0.5f);
 

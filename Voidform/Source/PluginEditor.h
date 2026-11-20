@@ -93,6 +93,12 @@ private:
     int aspectMode() const { return (int) std::lround(proc.apvts.getRawParameterValue("aspect")->load()); }
     juce::Rectangle<int> fitToStage(juce::Rectangle<int> stage) const;
     void applyPreset(int index);
+    void applyValues(const juce::var& values);
+    void applyFeel(int index);
+    void saveLookDialog();
+    void loadUserLooks();
+    void rebuildLookBox(int selectId = 0);
+    static juce::File userLooksFile();
     void setUiHidden(bool);
 
     VoidformProcessor& proc;
@@ -101,8 +107,10 @@ private:
     SpectrumView spectrum;
     ControlPanel panel;
     juce::Viewport viewport;
-    juce::ComboBox presetBox, aspectBox;
-    juce::Label presetLabel, aspectLabel;
+    juce::ComboBox presetBox, aspectBox, feelBox;
+    juce::Label presetLabel, aspectLabel, feelLabel;
+    juce::TextButton saveButton { "Save look" };
+    juce::Array<juce::var> userLooks;
     juce::TextButton hideButton { "Hide UI" };
     juce::ToggleButton frameToggle { "Frame" };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> frameAttach;
@@ -111,7 +119,7 @@ private:
     juce::Slider crtSlider { juce::Slider::LinearHorizontal, juce::Slider::TextBoxRight };
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> crtAttach;
     juce::Rectangle<int> stageArea;
-    juce::var presets;
+    juce::var presets, feels;
     bool uiHidden = false;
     static constexpr int panelWidth = 360;
 
