@@ -9,6 +9,9 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: Voidform
     steps:
       - uses: actions/checkout@v4
       - name: Configure
@@ -18,4 +21,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Voidform-${{ matrix.os }}
-          path: build/Voidform_artefacts/Release/VST3/Voidform.vst3
+          path: Voidform/build/Voidform_artefacts/Release/VST3/Voidform.vst3
+        
